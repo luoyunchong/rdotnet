@@ -111,7 +111,7 @@ namespace RDotNet
             }
             if (charByteCounter > 1)
             {
-                throw new Exception("非预期的byte格式");
+                return false;
             }
             return true;
         }

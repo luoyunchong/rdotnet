@@ -30,9 +30,10 @@ namespace RDotNet
             Assert.That(encoding[0], Is.EqualTo("UTF-8"));
             Assert.That(encoding[1], Is.EqualTo("UTF-8"));
 
-            var d = engine.CreateCharacter("中言语");
+            var chinesetCharacter = engine.CreateCharacter("中言语");
+            var chineseTest = engine.Evaluate("x <- c('中言语', 'abc')").AsCharacter();
 
-            var c = d[0];
+            var c = chinesetCharacter[0];
 
             Assert.That(vector.Length, Is.EqualTo(2));
             Assert.That(vector[0], Is.EqualTo("красавица Наталья"));

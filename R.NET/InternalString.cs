@@ -1,7 +1,6 @@
 ﻿using RDotNet.Internals;
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Permissions;
 using System.Text;
@@ -41,8 +40,25 @@ namespace RDotNet
             while (Marshal.ReadByte(utf8, len) != 0) ++len;
             byte[] buffer = new byte[len];
             Marshal.Copy(utf8, buffer, 0, buffer.Length);
-            byte[] newBuffer = Encoding.Convert(GetType(buffer), Encoding.UTF8, buffer);
-            return Encoding.UTF8.GetString(newBuffer);
+            Encoding encoding = GetType(buffer);
+            if (encoding.Equals(Encoding.UTF8))
+            {
+                string r = Encoding.UTF8.GetString(buffer);
+                if (System.Text.RegularExpressions.Regex.IsMatch(r, @"[\u4e00-\u9fbb]+$"))
+                {
+                    return r;
+                }
+                else
+                {
+                    byte[] newBuffer = Encoding.Convert(Encoding.Default, Encoding.UTF8, buffer);
+                    return Encoding.UTF8.GetString(newBuffer);
+                }
+            }
+            else
+            {
+                byte[] newBuffer = Encoding.Convert(encoding, Encoding.UTF8, buffer);
+                return Encoding.UTF8.GetString(newBuffer);
+            }
         }
 
         /// <summary>
@@ -55,8 +71,9 @@ namespace RDotNet
             byte[] unicode = new byte[] { 0xFF, 0xFE, 0x41 };
             byte[] unicodeBig = new byte[] { 0xFE, 0xFF, 0x00 };
             byte[] utf8 = new byte[] { 0xEF, 0xBB, 0xBF }; //带BOM
+            sbyte[] tsbyte = (sbyte[])(Array)ss;
             Encoding reVal = Encoding.Default;
-            if (IsUtf8Bytes(ss) || (ss[0] == 0xEF && ss[1] == 0xBB && ss[2] == 0xBF))
+            if (InternalString.UTF8Probability(tsbyte) > 0 || (ss[0] == 0xEF && ss[1] == 0xBB && ss[2] == 0xBF))
             {
                 reVal = Encoding.UTF8;
             }
@@ -77,44 +94,66 @@ namespace RDotNet
         /// </summary>
         /// <param name="data"></param>
         /// <returns></returns>
-        private static bool IsUtf8Bytes(byte[] data)
+
+        /// <summary>
+        /// 判断是UTF8编码的可能性
+        /// </summary>
+        /// <param name="rawtext">要判断的 <see cref="sbyte"/> 字节数组</param>
+        /// <returns>返回 0 至 100 之间的可能性</returns>
+        private static int UTF8Probability(sbyte[] rawtext)
         {
-            int charByteCounter = 1; //计算当前正分析的字符应还有的字节数
-            foreach (var t in data)
+            int score = 0;
+            int i, rawtextlen = 0;
+            int goodbytes = 0, asciibytes = 0;
+
+            // Maybe also use UTF8 Byte order Mark:  EF BB BF
+
+            // Check to see if characters fit into acceptable ranges
+            rawtextlen = rawtext.Length;
+            for (i = 0; i < rawtextlen; i++)
             {
-                var curByte = t; //当前分析的字节.
-                if (charByteCounter == 1)
+                if ((rawtext[i] & (sbyte)0x7F) == rawtext[i])
                 {
-                    if (curByte >= 0x80)
-                    {
-                        //判断当前
-                        while (((curByte <<= 1) & 0x80) != 0)
-                        {
-                            charByteCounter++;
-                        }
-                        //标记位首位若为非0 则至少以2个1开始 如:110XXXXX...........1111110X 
-                        if (charByteCounter == 1 || charByteCounter > 6)
-                        {
-                            return false;
-                        }
-                    }
+                    // One byte
+                    asciibytes++;
+                    // Ignore ASCII, can throw off count
                 }
-                else
+                else if (-64 <= rawtext[i] && rawtext[i] <= -33 && i + 1 < rawtextlen && -128 <= rawtext[i + 1] && rawtext[i + 1] <= -65)
                 {
-                    //若是UTF-8 此时第一位必须为1
-                    if ((curByte & 0xC0) != 0x80)
-                    {
-                        return false;
-                    }
-                    charByteCounter--;
+                    goodbytes += 2;
+                    i++;
+                }
+                else if (-32 <= rawtext[i] && rawtext[i] <= -17 && i + 2 < rawtextlen && -128 <= rawtext[i + 1] && rawtext[i + 1] <= -65 && -128 <= rawtext[i + 2] && rawtext[i + 2] <= -65)
+                {
+                    goodbytes += 3;
+                    i += 2;
                 }
             }
-            if (charByteCounter > 1)
+
+            if (asciibytes == rawtextlen)
             {
-                return false;
+                return 0;
             }
-            return true;
+
+            score = (int)(100 * ((float)goodbytes / (float)(rawtextlen - asciibytes)));
+
+            // If not above 98, reduce to zero to prevent coincidental matches
+            // Allows for some (few) bad formed sequences
+            if (score > 98)
+            {
+                return score;
+            }
+            else if (score > 95 && goodbytes > 30)
+            {
+                return score;
+            }
+            else
+            {
+                return 0;
+            }
         }
+
+
         /// <summary>
         /// Creates a new instance.
         /// </summary>

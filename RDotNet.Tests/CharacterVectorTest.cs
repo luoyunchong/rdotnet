@@ -32,6 +32,8 @@ namespace RDotNet
 
             var chinesetCharacter = engine.CreateCharacter("中言语");
             var chineseTest = engine.Evaluate("x <- c('中言语', 'abc')").AsCharacter();
+            var z = engine.Evaluate("x <- c('知母', 'abc')").AsCharacter();
+            var x=engine.Evaluate("x").AsCharacter();
 
             var c = chinesetCharacter[0];
 

@@ -38,9 +38,13 @@ namespace RDotNet
             : base(IntPtr.Zero, true)
         {
             this.engine = engine;
-            this.sexp = (SEXPREC)Marshal.PtrToStructure(pointer, typeof(SEXPREC));
-            SetHandle(pointer);
-            Preserve();
+            if (pointer != new IntPtr(0x00000000))
+            {
+                this.sexp = (SEXPREC)Marshal.PtrToStructure(pointer, typeof(SEXPREC));
+                SetHandle(pointer);
+                Preserve();
+            }
+
         }
 
         /// <summary>
